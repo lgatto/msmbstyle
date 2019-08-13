@@ -23,14 +23,13 @@ msmb_html_book = function(...) {
 #' @param margin_references \code{logical}.  Determines whether to place 
 #'   citations in the margin, or collate them at the end of the document.
 #' @rdname msmb_html
+#' @importFrom bookdown resolve_refs_html
 #' @export
 msmb_html = function(
   ..., 
   margin_references = TRUE
 ) {
 
-  #tufte_variant = match.arg(tufte_variant)
-  ##if (missing(tufte_features) && tufte_variant != 'default') 
   tufte_variant = "envisioned"
   tufte_features = character()
   
@@ -63,6 +62,9 @@ msmb_html = function(
     knitr::opts_hooks$restore(ohooks)
 
     x = xfun::read_utf8(output)
+    
+    x = resolve_refs_html(x)
+    
     fn_label = paste0(knitr::opts_knit$get('rmarkdown.pandoc.id_prefix'), 'fn')
     footnotes = tufte:::parse_footnotes(x, fn_label)
     notes = footnotes$items
@@ -126,6 +128,9 @@ msmb_html = function(
       }
       z
     })
+    
+    # remove hardcoded sourceCode styling
+    x = stringr::str_remove(x, fixed(".sourceCode { overflow: visible; }"))
     
     x = .toc_2_navbar(x, md_file = input)
 
@@ -257,24 +262,22 @@ msmb_html_dependency = function() {
                      '<p><p class="author">', 
                      paste(yaml$author, collapse = ', '), '</p>')
 
-    toc_start <- min(which(str_detect(x, '<ul>')))
-    toc_end <- min(which(str_detect(x, '</ul>')))
-    x[toc_start] <- paste0('<ul class="navbar">\n',
-        '<li class="msmb">', header, '</li>\n',
-        '<li class="dropdown" style="float:right">\n',
-        '<a href="javascript:void(0)" class="dropbtn">&#x25BE; Chapters</a>\n',
-        '<div class="dropdown-content">')
+    toc_start <- str_which(x, pattern = "<!--bookdown:toc:start-->")
+    toc_end <- str_which(x, pattern = "<!--bookdown:toc:end-->")
     x[toc_start:toc_end] <- x[toc_start:toc_end] %>%
+        str_replace('<ul>',
+                    paste0('<ul class="navbar">\n',
+                           '<li class="msmb">', header, '</li>\n',
+                           '<li class="dropdown" style="float:right">\n',
+                           '<a href="javascript:void(0)" class="dropbtn">&#x25BE; Chapters</a>\n',
+                           '<div class="dropdown-content">')) %>%
         str_replace_all('<li>', '') %>% 
-        str_replace_all('</li>', '') #%>%
-        #str_replace_all('href="([[:alnum:]:-]+.html)?#[[:alpha:]:-]+', 'href="\\1')
-    x[toc_end] <- '</div>\n</li>'
-
-    ## close the navbar list
-    x[toc_end] <- str_c(x[toc_end], '\n</ul>')
+        str_replace_all('</li>', '') %>%
+        str_replace('</ul>', '</div>\n</li>\n</ul>')
     
     return(x)
 }
+
 
 msmb_build_chapter = function(
     head, toc, chapter, link_prev, link_next, rmd_cur, html_cur, foot
@@ -289,17 +292,22 @@ msmb_build_chapter = function(
     toc = gsub('^(<li>)(.+<ul>)$', '<li class="has-sub">\\2', toc)
     
     toc = str_replace_all(toc, 
-                          pattern = 'href="([[:alnum:]:-]+.html)?#[[:alpha:]:-]+', 
+                          pattern = 'href="([[:alnum:]:-]+.html)?#[[:alnum:]:-]+', 
                           replacement = 'href="\\1')
     
     # manipulate the TOC for this page to include sections
-    this_page = min(which(str_detect(toc, html_cur)))
-    toc[ this_page ] <- toc[ this_page ] %>%
-             str_replace('href', 'id="active-page" href') %>%
-             str_c(.create_section_links(chapter, include_nums = FALSE))
+    this_page_idx <- str_which(toc, html_cur)
+    if(length(this_page_idx)) {
+        this_page = min(this_page_idx)
+        toc[ this_page ] <- toc[ this_page ] %>%
+                 str_replace('href', 'id="active-page" href') %>%
+                 str_c(.create_section_links(chapter, include_nums = FALSE))
+    }
     
-    chapter <- .number_questions(chapter)
+    #chapter <- .number_questions(chapter)
     chapter <- .nonumber_chap_figs(chapter)
+    chapter <- .retag_margin_figures(chapter)
+    chapter <- .move_margin_table(chapter)
     
     paste(c(
         head,
@@ -342,13 +350,14 @@ msmb_build_chapter = function(
         MoreArgs = list(chapter = chapter, chap_num = chap_num))
     
     question_labs <- str_match(chapter[question_divs], "id=\"(ques:[[:alnum:]-]+)\"")[,2]
+
     for(i in seq_along(question_labs)) {
         ref_lines <- stringr::str_which(chapter, paste0("<a href=\".*#", question_labs[i], "\">"))
         chapter[ref_lines] <- str_replace(chapter[ref_lines], 
                                           "\\?\\?",
                                           paste0(chap_num, "\\.", i))
     }
-    
+
     return(chapter)
 }
 
@@ -394,3 +403,48 @@ msmb_build_chapter = function(
     stringr::str_split(chapter3, "\n")[[1]]
 
 }
+
+## the ID attribute/anchor for margin figures ends up inside a comment block
+## Here we look for these, and move the id into a 'name' attribute
+## for the appropriate <img> tag
+.retag_margin_figures <- function(chapter) {
+    idx <- stringr::str_which(chapter, "<img.*<!--<span id")
+    
+    if(length(idx)) {
+        id <- str_match(chapter[idx], pattern = "<!--<span (id=\"fig:[[:alnum:]-]+\")")[,2]
+        chapter[idx] <- str_replace(chapter[idx], pattern = "<img ", paste0("<img ", id, " ")) %>%
+            stringr::str_replace_all("<!--<span id=\"fig:.*</span>", "<!--")
+    }
+    
+    return(chapter)
+}
+
+#' @importFrom xml2 read_html xml_find_all xml_add_sibling
+.move_margin_table <- function(chapter) {
+  
+  chapter2 <- paste0(chapter, collapse = "\n")
+  
+  html <- xml2::read_html(chapter2)
+
+  margin_tabs <- xml2::xml_find_all(html, 
+                            xpath = "//table[contains(@class, 'margintab')]")
+  
+  for(i in seq_along(margin_tabs)) {
+    ## paragraph immediately before, should be a caption
+    caption <- xml_find_all(margin_tabs[[i]], xpath = "preceding-sibling::p[1]")[[1]]
+    ## sibling 2 before - this may or may not be a code chunk
+    code <- xml_find_all(margin_tabs[[i]], xpath = "preceding-sibling::*[2]")[[1]]
+    if(grepl('<pre class="sourceCode', as.character(code))) {
+      if(grepl('<caption>', as.character(caption))) {
+        xml_add_sibling(code, caption, .where = "before", .copy = FALSE)
+      }
+      xml_add_sibling(code, margin_tabs[[i]], .where = "before", .copy = FALSE)
+    } else if (grepl('<caption>', as.character(caption))) {
+      xml_add_sibling(.x = margin_tabs[[i]], .value = caption, .where = "before", .copy = FALSE)
+    }
+  }
+  
+  chapter <- stringr::str_split(as.character(html), "\n")[[1]]
+  return(chapter)
+}
+

@@ -57,12 +57,6 @@ its only here while we sort out the book*/
     cursor: pointer;
 }
 
-/*
-.marginnote, .sidenote {
-  margin-left: -100%;
-}
-*/
-
 .margintab {
   margin: 0;
   width: 30%;
@@ -142,6 +136,37 @@ li.dropdown {
     display: inline-block;
     color: white;
     padding: 0;
+}
+
+
+li .marginnote,li .sidenote {
+    width: 61%;
+    margin-right: -84.4%;
+}
+
+blockquote {
+  width: 45%;
+  -webkit-padding-start: 5%;
+  -webkit-padding-end: 5%;
+  -moz-padding-start: 5%;
+  -moz-padding-end: 5%;
+  display: block;
+  margin-block-end: 0;
+  margin-block-start: 0;
+  margin-inline-start: 0;
+  scroll-margin-inline-end: 0;
+}
+
+blockquote p {
+  width: 100%;
+  background-color: #F7F7F7;
+  font-size: 1.3rem;
+  font-style: italic;
+}
+
+blockquote .marginnote, blockquote .sidenote {
+    width: 61%;
+    margin-right: -84.4%;
 }
 
 .msmb {
@@ -240,6 +265,9 @@ div.sourceCode {
     width: 56%;
 }
 
+/*
+changes to bookdown HTML render this
+obsolete for now
 pre.sourceCode {
     width: auto;
     padding: 2px;
@@ -250,17 +278,29 @@ pre.sourceCode {
 }
 
 pre {
-    width: auto;
-    padding: 2px;
-    padding-left: 10px;
+  width: 56%;
+}
+*/
+
+pre {
+    width: 53%;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    padding-left: 1%;
+    padding-right: 1%;
     background-color: #F7F7F7;
     margin-bottom: 10px;
     margin-top: 3px;
+    margin-top: 4px;
+    overflow-x: scroll;
 }
 
 .build-date {
   font-size: 0.8em;
   float: left;
+  line-height: 1em;
+  margin-bottom: 2em;
+  margin-top: 0;
 }
 
 @media (max-width: 760px) {
