@@ -66,7 +66,7 @@ msmb_html = function(
     x = resolve_refs_html(x)
     
     fn_label = paste0(knitr::opts_knit$get('rmarkdown.pandoc.id_prefix'), 'fn')
-    footnotes = tufte:::parse_footnotes(x, fn_label)
+    footnotes = parse_footnotes(x, fn_label)
     notes = footnotes$items
     # replace footnotes with sidenotes
     for (i in seq_along(notes)) {
@@ -286,7 +286,7 @@ msmb_build_chapter = function(
     ## insert script for solution toggle
     ## we put it after the msmb.css as this should always be present
     last_script <- max(str_which(head, "msmb.css\""))
-    head[last_script] <- paste(head[last_script], toggle_script(), sep = "\n")
+    head[last_script] <- paste(head[last_script], toggle_script(), copy_link_script(), sep = "\n")
     
     # add a has-sub class to the <li> items that has sub lists
     toc = gsub('^(<li>)(.+<ul>)$', '<li class="has-sub">\\2', toc)
@@ -308,6 +308,7 @@ msmb_build_chapter = function(
     chapter <- .nonumber_chap_figs(chapter)
     chapter <- .retag_margin_figures(chapter)
     chapter <- .move_margin_table(chapter)
+    chapter <- .add_internal_links(chapter)
     
     paste(c(
         head,
@@ -324,7 +325,7 @@ msmb_build_chapter = function(
         bookdown:::source_link(rmd_cur),
         bookdown:::button_link(link_next, 'Next'),
         '</p>',
-        '<p class="build-date">Page built: ', as.character(Sys.Date()), '</p>',
+        '<p class="build-date">Page built: ', as.character(Sys.Date()), ' using ', R.version.string, '</p>',
         '</div>',
         '</div>',
         foot
@@ -442,6 +443,66 @@ msmb_build_chapter = function(
     } else if (grepl('<caption>', as.character(caption))) {
       xml_add_sibling(.x = margin_tabs[[i]], .value = caption, .where = "before", .copy = FALSE)
     }
+  }
+  
+  chapter <- stringr::str_split(as.character(html), "\n")[[1]]
+  return(chapter)
+}
+
+#' @importFrom xml2 read_html xml_find_all xml_add_child xml_add_parent
+.add_internal_links <- function(chapter) {
+  chapter2 <- paste0(chapter, collapse = "\n")
+  
+  html <- xml2::read_html(chapter2)
+  
+  sections <- xml2::xml_find_all(html, xpath = "//h2|//h3")
+  for(j in seq_along(sections)) {
+    
+    ## construct the span we'll insert into the HTML to provide the link
+    section_name <- xml2::xml_attr(xml2::xml_parent(sections[[j]]), attr = "id")
+    
+    span <- list("Copy link")
+    attr(span, ".class") <- "tooltiptext"
+    attr(span, "id") <- paste0(section_name, "-tooltip")
+    i <- list()
+    attr(i, ".class") <- "fa fa-link"
+    button <- list(span = span, i = i)
+    attr(button, ".class") <- "internal-link-btn"
+    
+    attr(button, "onclick") <- paste0("copy_link('",  section_name, "')")
+    attr(button, "onmouseout") <- paste0("reset_tooltip('",  section_name, "-tooltip')")
+    
+    div <- list(button = button)
+    attr(div, ".class") <- "tooltip"
+    
+    xml_add_child(.x = sections[[j]], .value = xml2::as_xml_document(list(div = div)), .copy = TRUE)
+  }
+  
+  equations <- xml2::xml_find_all(html, xpath = "//span[contains(@class, 'math display') and contains(@id,'eq:')]")
+  for(j in seq_along(equations)) {
+    
+    ## construct the span we'll insert into the HTML to provide the link
+    equation_id <- xml2::xml_attr(equations[[j]], attr = "id")
+    
+    xml2::xml_add_parent(.x = xml2::xml_parent(equations[[j]]), 
+                         .value = xml2::as_xml_document(list(div = structure(list(), .class="eqn-mouseover"))))
+    
+    span <- list("Copy link")
+    attr(span, ".class") <- "tooltiptext"
+    attr(span, "id") <- paste0(equation_id, "-tooltip")
+    i <- list()
+    attr(i, ".class") <- "fa fa-link"
+    button <- list(span = span, i = i)
+    attr(button, ".class") <- "internal-link-eqn"
+    
+    attr(button, "onclick") <- paste0("copy_link('",  equation_id, "')")
+    attr(button, "onmouseout") <- paste0("reset_tooltip('",  equation_id, "-tooltip')")
+    
+    div <- list(button = button)
+    attr(div, ".class") <- "tooltip-eqn"
+    
+    xml2::xml_add_sibling(.x = equations[[j]], .value = xml2::as_xml_document(list(div = div)),
+                    .where = "before", .copy = TRUE)
   }
   
   chapter <- stringr::str_split(as.character(html), "\n")[[1]]
