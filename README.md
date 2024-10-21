@@ -4,7 +4,7 @@ The **msmbstyle** package provides an alternative design for HTML books produced
 
 You can view a simple example of the HTML produced by **msmbstyle** at https://www-huber.embl.de/users/msmith/msmbstyle/, and the R Markdown documents used to generate this are present in the `/inst/extdata/` folder of this package
 
-A example of a complete book generated using **msmbstyle** can be found at [Modern Statistics for Modern Biology](https://www-huber.embl.de/msmb/) by S.&#xA0;Holmes & W.&#xA0;Huber.
+A example of a complete book generated using **msmbstyle** can be found at [Modern Statistics for Modern Biology](https://www.huber.embl.de/msmb/) by S.&#xA0;Holmes & W.&#xA0;Huber.
 
 ## **msmbstyle** vs **tufte** styling
 
